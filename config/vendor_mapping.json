@@ -1,0 +1,17 @@
+{
+  "description": "Optional overrides for vendor CSV column mapping. Leave empty to auto-detect.",
+  "examples": {
+    "single_line": {
+      "address": "delivery_address",
+      "customer_id": "account_id"
+    },
+    "multi_column": {
+      "line_1": "addr_line1",
+      "line_2": "addr_line2",
+      "city": "town",
+      "postcode": "post_code",
+      "customer_id": "cust_id"
+    }
+  },
+  "override": {}
+}

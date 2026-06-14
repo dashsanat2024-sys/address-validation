@@ -1,0 +1,43 @@
+{
+  "description": "Predefined client address format for database / SAP storage",
+  "fields": {
+    "customer_id": "Optional vendor/customer identifier",
+    "co": "Care-of / attention name",
+    "street_2": "Flat, unit, building, or second address line",
+    "street_3": "Organization, department, or supplementary line",
+    "street_house_number": "House or building number only",
+    "street_4": "Street / thoroughfare name",
+    "street_5": "Additional location detail (estate, park, etc.)",
+    "district": "District, borough, or county",
+    "other_city": "Post town / city",
+    "postal_code_city": "Combined postal code and city (e.g. SW1A 1AA LONDON)",
+    "country": "Country code (GB for United Kingdom)",
+    "time_zone": "Time zone (GMTUK for UK)",
+    "transportation_zone": "Logistics / transportation zone",
+    "reg_struct_grp": "Regional structure group",
+    "undeliverable": "Undeliverable flag (X or empty)",
+    "po_box_address": "PO Box address flag (X or empty)",
+    "po_box": "PO Box number",
+    "postal_code": "UK postcode (e.g. SW1A 1AA)"
+  },
+  "example": {
+    "customer_id": "CUST-001",
+    "co": "",
+    "street_2": "Flat 2",
+    "street_3": "",
+    "street_house_number": "10",
+    "street_4": "High Street",
+    "street_5": "",
+    "district": "Westminster",
+    "other_city": "London",
+    "postal_code_city": "SW1A 1AA LONDON",
+    "country": "GB",
+    "time_zone": "GMTUK",
+    "transportation_zone": "",
+    "reg_struct_grp": "",
+    "undeliverable": "",
+    "po_box_address": "",
+    "po_box": "",
+    "postal_code": "SW1A 1AA"
+  }
+}
