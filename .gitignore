@@ -3,7 +3,29 @@ __pycache__/
 *.pyc
 .env
 .env.local
+.env.*
+!.env.example
+gcp.env
 .DS_Store
 .pytest_cache/
+.vercel
+node_modules/
+
+# Secrets & local review data
 data/review/corrections.csv
 *.csv.bak
+poc/**/.env
+
+# Large generated / model artifacts
+artifacts/
+*.gguf
+*.safetensors
+
+# Large training dumps (rebuild with tools/)
+data/training/train.jsonl
+data/training/synthetic.jsonl
+data/training/postcodes_cache.json
+
+# Generated office docs (optional local only)
+docs/*.pptx
+docs/ppt_templates/

@@ -41,5 +41,68 @@ def test_legacy_field_migration():
     assert addr.district == "Westminster"
 
 
+def test_multi_line_flat_building_street():
+    """Flat + building + numbered street + city (common UK vendor format)."""
+    addr = StandardAddress.from_vendor_text(
+        "FLAT 3, BURFORD LODGE, 5 MONTPELLIER PARADE, CHELTENHAM"
+    )
+    assert addr.street_2 == "FLAT 3"
+    assert addr.street_3 == "BURFORD LODGE"
+    assert addr.street_house_number == "5"
+    assert addr.street_4 == "Montpellier Parade"
+    assert addr.other_city == "CHELTENHAM"
+
+
+def test_space_separated_apartment_building_street():
+    addr = StandardAddress.from_vendor_text(
+        "Apartment 7 Elliot's Yard 8 Gulson Road Coventry"
+    )
+    assert addr.street_2 == "Apartment 7"
+    assert addr.street_3 == "Elliot's Yard"
+    assert addr.street_house_number == "8"
+    assert addr.street_4 == "Gulson Road"
+    assert addr.other_city == "Coventry"
+
+
+def test_space_separated_reversed_street_number_unit():
+    addr = StandardAddress.from_vendor_text(
+        "Gulson Road 8 Apartment 7 Elliot's Yard Coventry"
+    )
+    assert addr.street_2 == "Apartment 7"
+    assert addr.street_3 == "Elliot's Yard"
+    assert addr.street_house_number == "8"
+    assert addr.street_4 == "Gulson Road"
+    assert addr.other_city == "Coventry"
+
+
 def test_postal_code_city_helper():
     assert format_postal_code_city("sw1a1aa", "london") == "SW1A 1AA LONDON"
+
+
+def test_business_comma_org_unit_address():
+    """Industrial estate: company co, unit, court, way, park, city."""
+    addr = StandardAddress.from_vendor_text(
+        "COMEX 2000 UNIT 3 STADIUM BUSINESS COURT, MILLENNIUM WAY,PRIDE PARK,DERBY"
+    )
+    assert addr.co == "COMEX 2000"
+    assert addr.street_2 == "UNIT 3"
+    assert addr.street_3 == "Stadium Business Court"
+    assert addr.street_4 == "Pride Park"
+    assert addr.street_5 == "Millennium Way"
+    assert addr.district == "DERBY"
+    assert addr.other_city == "DERBY"
+
+
+def test_postal_code_city_object_from_llm():
+    addr = StandardAddress.from_llm_json(
+        {
+            "street_house_number": "8",
+            "street_4": "Gulson Road",
+            "other_city": "coventry",
+            "postal_code": "CV1 2nf",
+            "postal_code_city": {"postal_code": "CV1 2nf", "city": "coventry"},
+        }
+    )
+    assert addr.postal_code == "CV1 2NF"
+    assert addr.postal_code_city == "CV1 2NF COVENTRY"
+    assert addr.other_city == "coventry"

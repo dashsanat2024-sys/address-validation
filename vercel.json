@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "env": {
+    "LLM_PROVIDER": "openai",
+    "OPENAI_MODEL": "gpt-4o-mini",
+    "LOCAL_STREET_FIRST": "1",
+    "LOCAL_ADDRESS_AUTO": "1",
+    "RAG_ENABLED": "1",
+    "OLLAMA_WARMUP": "0",
+    "FLASK_DEBUG": "0"
+  }
+}

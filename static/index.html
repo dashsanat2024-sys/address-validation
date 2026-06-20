@@ -15,75 +15,122 @@
     <a class="brand" href="/">
       <img src="/static/assets/logo-mark.svg" alt="Arthavi" width="36" height="36" />
       <div class="brand-text">
-        <h1>Arthavi Address Validation</h1>
-        <p>UK vendor addresses → validated → client format → database</p>
+        <span class="brand-name">Arthavi</span>
+        <h1>Address Validation</h1>
       </div>
     </a>
-    <div class="header-meta">
-      <span class="meta-pill" id="headerValidator">Validator: …</span>
-      <span class="meta-pill accent" id="headerModel">Model: …</span>
+    <div class="header-status" id="headerStatus" aria-label="System status">
+      <div class="status-item" id="statusOllama">
+        <span class="status-dot"></span>
+        <span class="status-label">Ollama</span>
+      </div>
+      <div class="status-item" id="statusModel">
+        <span class="status-dot"></span>
+        <span class="status-label">Model</span>
+      </div>
+      <div class="status-item" id="statusValidator">
+        <span class="status-dot"></span>
+        <span class="status-label">Validator</span>
+      </div>
+      <div class="status-item" id="statusAzure">
+        <span class="status-dot"></span>
+        <span class="status-label">Azure</span>
+      </div>
     </div>
   </header>
 
   <div class="app-shell">
-    <section class="workflow-strip" aria-label="Workflow">
-      <div class="workflow-step">
-        <span class="step-num">1</span>
-        <div class="step-body"><strong>Upload CSV</strong><span>Vendor address file</span></div>
-      </div>
-      <div class="workflow-step">
-        <span class="step-num">2</span>
-        <div class="step-body"><strong>Validate</strong><span>Postcodes.io / Ideal Postcodes</span></div>
-      </div>
-      <div class="workflow-step">
-        <span class="step-num">3</span>
-        <div class="step-body"><strong>Normalize</strong><span>Map to client schema</span></div>
-      </div>
-      <div class="workflow-step">
-        <span class="step-num">4</span>
-        <div class="step-body"><strong>Export</strong><span>DB-ready CSV download</span></div>
-      </div>
+    <section class="intro-banner">
+      <p class="intro-lead">
+        Turn messy UK vendor addresses into your <strong>17-field SAP client format</strong>.
+        Postcodes.io checks postcodes; the <strong>arthavi-address</strong> model maps fields regardless of order.
+      </p>
     </section>
 
-    <div class="main-grid">
-      <!-- Left column: batch -->
-      <div class="col-stack">
-        <section class="card">
-          <div class="card-head">
-            <h2><span class="icon">📂</span> Batch processing</h2>
+    <div class="page-layout">
+      <main class="main-content">
+        <!-- Step 1: Upload -->
+        <section class="card step-card" id="step-upload">
+          <div class="step-header">
+            <span class="step-badge">1</span>
+            <div>
+              <h2>Upload vendor CSV</h2>
+              <p class="step-desc">Single-line or multi-column address formats supported.</p>
+            </div>
           </div>
           <div class="card-body">
             <div class="dropzone" id="dropzone">
               <input type="file" id="csvFile" accept=".csv,text/csv" />
-              <div class="dropzone-icon">📄</div>
-              <div class="dropzone-title">Drop vendor CSV here or click to browse</div>
-              <div class="dropzone-sub">Supports single-line or multi-column address formats</div>
+              <div class="dropzone-inner">
+                <svg class="dropzone-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+                <div class="dropzone-title">Drop CSV here or click to browse</div>
+                <div class="dropzone-sub">Columns: customer ID + address (or full vendor export)</div>
+              </div>
               <div class="file-name" id="fileName"></div>
             </div>
+          </div>
+        </section>
 
-            <div class="grid-2" style="margin-top:1rem;">
-              <div class="field">
-                <label for="validator">Address validator</label>
-                <select id="validator">
-                  <option value="">Server default</option>
-                  <option value="postcodes_io">Postcodes.io (free)</option>
-                  <option value="ideal_postcodes">Ideal Postcodes</option>
-                </select>
-                <p class="hint" id="validatorHint">Loading server configuration…</p>
-              </div>
-              <div class="field">
-                <label>Processing mode</label>
-                <div class="check-row">
-                  <input type="checkbox" id="useLlm" checked />
-                  <label for="useLlm">LLM normalization via Qwen (Ollama) — higher accuracy, slower</label>
-                </div>
-                <p class="hint">Uncheck for fast mode: postcode validation + rule-based mapping.</p>
-              </div>
+        <!-- Step 2: Mode -->
+        <section class="card step-card" id="step-mode">
+          <div class="step-header">
+            <span class="step-badge">2</span>
+            <div>
+              <h2>Choose processing mode</h2>
+              <p class="step-desc">Pick how each row is validated and mapped.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="mode-grid" role="radiogroup" aria-label="Processing mode">
+              <label class="mode-card selected" data-mode="recommended">
+                <input type="radio" name="mode" value="recommended" checked />
+                <span class="mode-tag recommended">Recommended</span>
+                <strong>Validate + AI mapping</strong>
+                <span class="mode-detail">Postcodes.io checks postcode, then arthavi-address maps to SAP fields.</span>
+                <span class="mode-speed">~30–90s per row</span>
+              </label>
+              <label class="mode-card" data-mode="fast">
+                <input type="radio" name="mode" value="fast" />
+                <span class="mode-tag fast">Fast</span>
+                <strong>Validate + rules only</strong>
+                <span class="mode-detail">Postcodes.io + rule parser. No Ollama — good for bulk preview.</span>
+                <span class="mode-speed">~1–3s per row</span>
+              </label>
+              <label class="mode-card" data-mode="llm-only">
+                <input type="radio" name="mode" value="llm-only" />
+                <span class="mode-tag llm">LLM only</span>
+                <strong>AI mapping only</strong>
+                <span class="mode-detail">Skip external API. Model checks postcode format and maps fields.</span>
+                <span class="mode-speed">~30–90s per row</span>
+              </label>
             </div>
 
+            <!-- Hidden controls synced by JS -->
+            <input type="checkbox" id="useValidation" checked hidden />
+            <input type="checkbox" id="useLlm" checked hidden />
+            <select id="validator" hidden>
+              <option value="">Server default</option>
+              <option value="postcodes_io">Postcodes.io (free)</option>
+              <option value="ideal_postcodes">Ideal Postcodes</option>
+            </select>
+
+            <p class="mode-summary" id="modeHint"></p>
+          </div>
+        </section>
+
+        <!-- Step 3: Process -->
+        <section class="card step-card" id="step-process">
+          <div class="step-header">
+            <span class="step-badge">3</span>
+            <div>
+              <h2>Process &amp; export</h2>
+              <p class="step-desc">Run the batch and download a database-ready CSV.</p>
+            </div>
+          </div>
+          <div class="card-body">
             <div class="actions">
               <button type="button" class="btn btn-primary" id="processAllBtn">
-                <span>▶</span> Process all &amp; download DB CSV
+                Process all &amp; download CSV
               </button>
               <button type="button" class="btn btn-secondary" id="previewBtn">Preview mapping</button>
               <button type="button" class="btn btn-ghost btn-sm" id="importBtn">Import to review queue</button>
@@ -103,71 +150,185 @@
           </div>
         </section>
 
-        <section class="card collapsible" id="validationCard">
-          <div class="card-head collapsible-head" data-target="validationCard">
-            <h2><span class="icon">✓</span> Validation details <span id="valBadge" class="badge">—</span></h2>
-            <span class="chevron">▼</span>
-          </div>
-          <div class="card-body collapsible-body">
-            <pre class="code-block" id="validationOut">{}</pre>
-          </div>
-        </section>
-      </div>
-
-      <!-- Right column: review -->
-      <div class="col-stack">
-        <section class="card">
-          <div class="card-head">
-            <h2><span class="icon">✎</span> Single address review</h2>
+        <!-- Step 4: Review -->
+        <section class="card step-card" id="step-review">
+          <div class="step-header">
+            <span class="step-badge">4</span>
+            <div>
+              <h2>Review &amp; correct <span id="queueCount" class="badge">0</span></h2>
+              <p class="step-desc">Fix wrong mappings — corrections feed the next model training run.</p>
+            </div>
           </div>
           <div class="card-body">
-            <div class="field">
-              <label for="customerId">Customer ID</label>
-              <input id="customerId" placeholder="e.g. 1, CUST-001" />
-            </div>
-            <div class="field">
-              <label for="vendorAddress">Vendor address</label>
-              <textarea id="vendorAddress" placeholder="Flat 2, 10 high street, london, sw1a1aa"></textarea>
-            </div>
-            <div class="actions">
-              <button type="button" class="btn btn-primary" id="normalizeBtn">Normalize</button>
-              <button type="button" class="btn btn-secondary" id="saveReviewBtn" disabled>Save correction</button>
-            </div>
-            <div class="status-msg" id="status"></div>
-          </div>
-        </section>
+            <div class="review-grid">
+              <div class="review-form">
+                <div class="field">
+                  <label for="customerId">Customer ID</label>
+                  <input id="customerId" placeholder="e.g. CUST-001" />
+                </div>
+                <div class="field">
+                  <label for="vendorAddress">Vendor address</label>
+                  <textarea id="vendorAddress" placeholder="Flat 3, Burford Lodge, 5 Montpellier Parade, Cheltenham GL50 1UA"></textarea>
+                </div>
+                <div class="field">
+                  <label>AI provider (single-address test)</label>
+                  <div class="provider-toggle" role="radiogroup" aria-label="LLM provider">
+                    <label class="provider-option selected">
+                      <input type="radio" name="llmProvider" value="arthavi" checked />
+                      <strong>Arthavi LLM</strong>
+                      <span>Local Ollama · arthavi-address · $0 per request</span>
+                    </label>
+                    <label class="provider-option" id="azureProviderOption">
+                      <input type="radio" name="llmProvider" value="azure" />
+                      <strong>Azure OpenAI</strong>
+                      <span id="azureProviderHint">Cloud deployment · token + cost metrics</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="checkbox-row">
+                    <input type="checkbox" id="useRag" checked />
+                    <span><strong>Use RAG</strong> — retrieve similar corrected examples to guide mapping (Arthavi + Azure)</span>
+                  </label>
+                </div>
+                <div class="actions">
+                  <button type="button" class="btn btn-primary" id="normalizeBtn">Test single address</button>
+                  <button type="button" class="btn btn-secondary" id="saveReviewBtn" disabled>Save correction</button>
+                </div>
+                <div class="status-msg" id="status"></div>
+              </div>
 
-        <section class="card collapsible" id="formatCard">
-          <div class="card-head collapsible-head" data-target="formatCard">
-            <h2><span class="icon">📋</span> Client address format</h2>
-            <span class="chevron">▼</span>
-          </div>
-          <div class="card-body collapsible-body">
-            <div class="grid-3" id="addressFields"></div>
-          </div>
-        </section>
+              <div class="review-side">
+                <div class="stats-row">
+                  <div class="stat-card"><div class="val" id="statTotal">0</div><div class="lbl">In queue</div></div>
+                  <div class="stat-card"><div class="val" id="statOk">0</div><div class="lbl">OK</div></div>
+                  <div class="stat-card"><div class="val" id="statFail">0</div><div class="lbl">Failed</div></div>
+                </div>
+                <div class="queue-list" id="queue">
+                  <div class="queue-empty">Import a CSV to review rows one by one.</div>
+                </div>
+              </div>
+            </div>
 
-        <section class="card">
-          <div class="card-head">
-            <h2><span class="icon">📑</span> Review queue <span id="queueCount" class="badge">0</span></h2>
-          </div>
-          <div class="card-body">
-            <div class="stats-row">
-              <div class="stat-card"><div class="val" id="statTotal">0</div><div class="lbl">In queue</div></div>
-              <div class="stat-card"><div class="val" id="statOk">0</div><div class="lbl">Processed OK</div></div>
-              <div class="stat-card"><div class="val" id="statFail">0</div><div class="lbl">Failed</div></div>
-            </div>
-            <div class="queue-list" id="queue">
-              <div class="queue-empty">Import a CSV to build a review queue, or process in batch above.</div>
-            </div>
+            <section class="card collapsible collapsed" id="formatCard" style="margin-top:1rem;border:none;box-shadow:none;">
+              <div class="card-head collapsible-head" data-target="formatCard">
+                <h2>Client address fields</h2>
+                <span class="chevron">▼</span>
+              </div>
+              <div class="card-body collapsible-body" style="padding-top:0;">
+                <div class="grid-3" id="addressFields"></div>
+              </div>
+            </section>
+
+            <section class="card collapsible collapsed" id="validationCard" style="margin-top:0.5rem;border:none;box-shadow:none;">
+              <div class="card-head collapsible-head" data-target="validationCard">
+                <h2>Postcode validation <span id="valBadge" class="badge">—</span></h2>
+                <span class="chevron">▼</span>
+              </div>
+              <div class="card-body collapsible-body" style="padding-top:0;">
+                <pre class="code-block" id="validationOut">{}</pre>
+              </div>
+            </section>
+
+            <section class="card collapsible collapsed" id="analysisCard" style="margin-top:0.5rem;border:none;box-shadow:none;">
+              <div class="card-head collapsible-head" data-target="analysisCard">
+                <h2>LLM analysis &amp; cost comparison</h2>
+                <span class="chevron">▼</span>
+              </div>
+              <div class="card-body collapsible-body" style="padding-top:0;">
+                <div id="analysisSummary" class="analysis-summary">Run a single-address test to see token usage, prompts, and Arthavi vs Azure comparison.</div>
+                <div class="analysis-grid" id="analysisMetrics"></div>
+                <table class="comparison-table" id="comparisonTable" hidden>
+                  <thead>
+                    <tr>
+                      <th>Metric</th>
+                      <th>Arthavi LLM</th>
+                      <th>Azure OpenAI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="comparisonBody"></tbody>
+                </table>
+                <details class="prompt-details" id="ragDetails" hidden>
+                  <summary>View RAG retrieved examples</summary>
+                  <pre class="code-block" id="ragOut">[]</pre>
+                </details>
+                <details class="prompt-details" id="promptDetails" hidden>
+                  <summary>View prompts sent to model</summary>
+                  <div class="prompt-block">
+                    <h4>System prompt</h4>
+                    <pre class="code-block" id="systemPromptOut"></pre>
+                  </div>
+                  <div class="prompt-block">
+                    <h4>User prompt</h4>
+                    <pre class="code-block" id="userPromptOut"></pre>
+                  </div>
+                </details>
+              </div>
+            </section>
           </div>
         </section>
-      </div>
+      </main>
+
+      <aside class="guide-panel">
+        <div class="guide-block">
+          <h3>How it works</h3>
+          <ol class="guide-steps">
+            <li><strong>Upload</strong> your vendor CSV with customer IDs and addresses.</li>
+            <li><strong>Choose mode</strong> — recommended uses Postcodes.io + arthavi-address.</li>
+            <li><strong>Process</strong> — download the 17-field SAP export CSV.</li>
+            <li><strong>Review</strong> failures, fix fields, and save corrections.</li>
+          </ol>
+        </div>
+
+        <div class="guide-block">
+          <h3>Field mapping</h3>
+          <table class="mapping-table">
+            <thead><tr><th>Vendor text</th><th>SAP field</th></tr></thead>
+            <tbody>
+              <tr><td>Flat / Apartment</td><td><code>street_2</code></td></tr>
+              <tr><td>Building name</td><td><code>street_3</code></td></tr>
+              <tr><td>House number</td><td><code>street_house_number</code></td></tr>
+              <tr><td>Road name</td><td><code>street_4</code></td></tr>
+              <tr><td>City</td><td><code>other_city</code></td></tr>
+              <tr><td>Borough</td><td><code>district</code></td></tr>
+              <tr><td>Postcode</td><td><code>postal_code</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="guide-block guide-improve">
+          <h3>Improve the model</h3>
+          <p class="guide-intro">Each saved correction makes the next training run more accurate on your vendor formats.</p>
+          <ol class="guide-steps numbered-commands">
+            <li>
+              <strong>Collect corrections</strong>
+              <span>Save fixes in Step 4 → <code>data/review/corrections.csv</code></span>
+            </li>
+            <li>
+              <strong>Regenerate dataset</strong>
+              <code class="cmd">python tools/generate_training_dataset.py --count 2000 --merge-corrections</code>
+            </li>
+            <li>
+              <strong>Fine-tune</strong>
+              <code class="cmd">python tools/finetune_unsloth.py --data data/training/train.jsonl --epochs 2</code>
+            </li>
+            <li>
+              <strong>Deploy to Ollama</strong>
+              <code class="cmd">ollama create arthavi-address -f artifacts/arthavi-address/Modelfile</code>
+            </li>
+            <li>
+              <strong>Evaluate accuracy</strong>
+              <code class="cmd">python tools/evaluate_mapper.py --use-llm --model arthavi-address</code>
+            </li>
+          </ol>
+          <p class="guide-target">Target: ≥95% field accuracy on held-out addresses after retrain.</p>
+        </div>
+      </aside>
     </div>
   </div>
 
   <footer class="app-footer">
-    <strong>Arthavi</strong> Address Validation · Postcodes.io + Ollama Qwen · Client schema export
+    <span class="footer-brand">Arthavi</span> Address Validation · Postcodes.io + arthavi-address · UK SAP schema export
   </footer>
 
   <script src="/static/js/app.js"></script>

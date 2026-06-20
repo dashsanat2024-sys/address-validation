@@ -6,6 +6,8 @@ import os
 from typing import Protocol
 
 from .ideal_postcodes import IdealPostcodesClient
+from .local_address_store import is_local_index_available
+from .local_validator import LocalFirstValidator
 from .postcodes_io import PostcodesIOClient
 from .validation_result import AddressValidation
 
@@ -105,8 +107,12 @@ class PostcodesIOValidator:
         return _postcodes_to_validation(self._client.validate_postcode(postcode))
 
 
-def get_validator() -> CompositeValidator | PostcodesIOValidator:
+def get_validator() -> CompositeValidator | PostcodesIOValidator | LocalFirstValidator:
     mode = (os.getenv("ADDRESS_VALIDATOR") or "postcodes_io").strip().lower()
+    if mode in {"local_first", "local", "openaddress"}:
+        return LocalFirstValidator()
     if mode in {"ideal_postcodes", "ideal", "composite"}:
         return CompositeValidator()
+    if mode == "postcodes_io" and is_local_index_available() and os.getenv("LOCAL_ADDRESS_AUTO", "1") == "1":
+        return LocalFirstValidator()
     return PostcodesIOValidator()

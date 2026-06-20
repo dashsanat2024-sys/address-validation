@@ -23,8 +23,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="UK address validation pipeline")
     parser.add_argument("address", nargs="?", help="Vendor address string")
     parser.add_argument("--customer-id", default="", help="Optional customer ID")
-    parser.add_argument("--model", default=None, help="Ollama model (default: qwen3:8b)")
-    parser.add_argument("--skip-llm", action="store_true", help="Postcode validate only")
+    parser.add_argument("--model", default=None, help="Ollama model (default: qwen2.5:7b)")
+    parser.add_argument("--skip-llm", action="store_true", help="Skip Ollama normalization")
+    parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Bypass Postcodes.io / Ideal Postcodes; Ollama validates format and maps fields",
+    )
     parser.add_argument("--file", help="Vendor CSV (auto-detects columns)")
     parser.add_argument(
         "--export-csv",
@@ -32,7 +37,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    pipeline = AddressPipeline(model=args.model, skip_llm=args.skip_llm)
+    pipeline = AddressPipeline(
+        model=args.model,
+        skip_llm=args.skip_llm,
+        skip_validation=args.skip_validation,
+    )
 
     if args.file:
         config = load_mapping_config()

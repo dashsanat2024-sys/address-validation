@@ -7,9 +7,12 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .llm_validation import build_llm_only_context, merge_llm_validation_into_context
 from .normalize import AddressNormalizer, DEFAULT_MODEL
+from .ollama_client import OllamaTimeoutError
 from .preprocess import PreprocessedAddress, preprocess
-from .schema import StandardAddress, format_postal_code_city
+from .rag import attach_local_lookup
+from .schema import StandardAddress, format_postal_code_city, is_valid_uk_postcode_format
 from .validation_result import AddressValidation
 from .validator_factory import get_validator
 
@@ -28,6 +31,8 @@ class PipelineResult:
     errors: list[str] = field(default_factory=list)
     model: str = DEFAULT_MODEL
     validator: str = "postcodes_io"
+    skip_validation: bool = False
+    rag_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -39,17 +44,26 @@ class AddressPipeline:
         model: str | None = None,
         ollama_host: str | None = None,
         skip_llm: bool = False,
+        skip_validation: bool = False,
         validator: str | None = None,
     ):
         if validator:
             os.environ["ADDRESS_VALIDATOR"] = validator
         self.validator = get_validator()
         self.model = model or os.getenv("OLLAMA_MODEL", DEFAULT_MODEL)
-        self.normalizer = AddressNormalizer(model=self.model, host=ollama_host)
+        host = ollama_host or os.getenv("OLLAMA_HOST")
+        self.normalizer = AddressNormalizer(model=self.model, host=host)
         self.skip_llm = skip_llm
+        self.skip_validation = skip_validation
         self._validator_name = (validator or os.getenv("ADDRESS_VALIDATOR") or "postcodes_io").lower()
+        if self._validator_name == "postcodes_io" and os.getenv("LOCAL_ADDRESS_AUTO", "1") == "1":
+            from .local_address_store import is_local_index_available
+            if is_local_index_available():
+                self._validator_name = "local_first"
+        if skip_validation:
+            self._validator_name = "llm_only"
 
-    def run(self, vendor_address: str, customer_id: str = "") -> PipelineResult:
+    def run(self, vendor_address: str, customer_id: str = "", *, use_rag: bool | None = None) -> PipelineResult:
         warnings: list[str] = []
         errors: list[str] = []
 
@@ -60,75 +74,117 @@ class AddressPipeline:
             "remainder_without_postcode": pre.remainder_without_postcode,
         }
 
-        validation: AddressValidation = self.validator.cleanse_address(
-            vendor_address=vendor_address,
-            postcode_hint=pre.extracted_postcode,
-        )
-        val_dict = validation.to_context_dict()
-        if validation.raw_result:
-            val_dict["lookup"] = _extract_lookup(validation)
-
-        if not pre.extracted_postcode and not validation.valid:
-            errors.append("No UK postcode found in vendor address")
-            return PipelineResult(
-                success=False,
-                vendor_address=vendor_address,
-                customer_id=customer_id,
-                preprocessed=pre_dict,
-                postcode_validation=val_dict,
-                normalized_address={},
-                warnings=warnings,
-                errors=errors,
-                model=self.model,
-                validator=self._validator_name,
-            )
-
-        if not validation.valid:
-            errors.append(validation.error or "Address validation failed")
-            return PipelineResult(
-                success=False,
-                vendor_address=vendor_address,
-                customer_id=customer_id,
-                preprocessed=pre_dict,
-                postcode_validation=val_dict,
-                normalized_address={},
-                warnings=warnings,
-                errors=errors,
-                model=self.model,
-                validator=self._validator_name,
-            )
-
-        if validation.street_level_validated:
+        if self.skip_validation:
+            val_dict = build_llm_only_context(pre)
+            validation = None
             warnings.append(
-                f"Street-level validation via {validation.source} "
-                f"(confidence {validation.confidence:.2f})."
+                "External validation bypassed — Ollama assesses postcode format and maps fields. "
+                "Enable Postcodes.io / Ideal Postcodes when ground-truth validation is required."
             )
+            if not pre.extracted_postcode:
+                warnings.append("No postcode detected in vendor text — LLM will attempt extraction.")
+            elif not val_dict.get("postcode_format_ok"):
+                warnings.append(
+                    f"Extracted postcode '{pre.extracted_postcode}' may be malformed — LLM will review."
+                )
         else:
-            warnings.append(
-                "Postcode area validated only — street-level match not verified. "
-                "Set ADDRESS_VALIDATOR=ideal_postcodes with API key for full validation."
-            )
-
-        if validation.street_level_validated and validation.confidence and validation.confidence >= 0.9:
-            normalized = _map_validated_to_standard(validation, customer_id)
-            return PipelineResult(
-                success=True,
+            validation = self.validator.cleanse_address(
                 vendor_address=vendor_address,
-                customer_id=customer_id,
-                preprocessed=pre_dict,
-                postcode_validation=val_dict,
-                normalized_address=normalized.to_storage_dict(),
-                warnings=warnings + ["High-confidence match — LLM skipped"],
-                errors=errors,
-                model=self.model,
-                validator=self._validator_name,
+                postcode_hint=pre.extracted_postcode,
             )
+            val_dict = validation.to_context_dict()
+            if validation.raw_result:
+                val_dict["lookup"] = _extract_lookup(validation)
+            val_dict = attach_local_lookup(val_dict, vendor_address, pre.extracted_postcode)
+
+            if validation.source == "local_index":
+                tier = (validation.raw_result or {}).get("validation_tier", "local")
+                if tier.startswith("street_first"):
+                    conf = validation.confidence if validation.confidence is not None else 0.0
+                    warnings.append(
+                        f"Street-first local lookup resolved postcode {validation.postcode} "
+                        f"(confidence {conf:.2f}, tier={tier})."
+                    )
+                elif validation.street_level_validated:
+                    conf = validation.confidence if validation.confidence is not None else 0.0
+                    warnings.append(f"Local address index match (confidence {conf:.2f}) — Postcodes.io skipped.")
+                else:
+                    warnings.append(f"Local postcode validated ({tier}) — street match not confirmed.")
+            elif (validation.raw_result or {}).get("validation_tier") == "postcodes_io_fallback":
+                warnings.append("Postcodes.io fallback used — local index was not confident.")
+
+            if not pre.extracted_postcode and not validation.valid:
+                errors.append("No UK postcode found in vendor address")
+                return PipelineResult(
+                    success=False,
+                    vendor_address=vendor_address,
+                    customer_id=customer_id,
+                    preprocessed=pre_dict,
+                    postcode_validation=val_dict,
+                    normalized_address={},
+                    warnings=warnings,
+                    errors=errors,
+                    model=self.model,
+                    validator=self._validator_name,
+                    skip_validation=False,
+                )
+
+            if not validation.valid:
+                errors.append(validation.error or "Address validation failed")
+                return PipelineResult(
+                    success=False,
+                    vendor_address=vendor_address,
+                    customer_id=customer_id,
+                    preprocessed=pre_dict,
+                    postcode_validation=val_dict,
+                    normalized_address={},
+                    warnings=warnings,
+                    errors=errors,
+                    model=self.model,
+                    validator=self._validator_name,
+                    skip_validation=False,
+                )
+
+            if validation.street_level_validated:
+                warnings.append(
+                    f"Street-level validation via {validation.source} "
+                    f"(confidence {validation.confidence:.2f})."
+                )
+            else:
+                warnings.append(
+                    "Postcode area validated only — street-level match not verified. "
+                    "Set ADDRESS_VALIDATOR=ideal_postcodes with API key for full validation."
+                )
+
+            if validation.street_level_validated and validation.confidence and validation.confidence >= 0.9:
+                normalized = _map_validated_to_standard(validation, customer_id)
+                return PipelineResult(
+                    success=True,
+                    vendor_address=vendor_address,
+                    customer_id=customer_id,
+                    preprocessed=pre_dict,
+                    postcode_validation=val_dict,
+                    normalized_address=normalized.to_storage_dict(),
+                    warnings=warnings + ["High-confidence match — LLM skipped"],
+                    errors=errors,
+                    model=self.model,
+                    validator=self._validator_name,
+                    skip_validation=False,
+                )
 
         if self.skip_llm:
-            if validation.street_level_validated:
+            if self.skip_validation:
+                normalized = self._rule_based_fallback(pre, _empty_validation(pre), customer_id)
+                if pre.extracted_postcode:
+                    normalized.postal_code = pre.extracted_postcode
+                warnings.append(
+                    "LLM skipped in validation-bypass mode — rule-based mapping only; "
+                    "enable Ollama for postcode assessment."
+                )
+            elif validation and validation.street_level_validated:
                 normalized = _map_validated_to_standard(validation, customer_id)
             else:
-                normalized = self._rule_based_fallback(pre, validation, customer_id)
+                normalized = self._rule_based_fallback(pre, validation or _empty_validation(pre), customer_id)
             return PipelineResult(
                 success=True,
                 vendor_address=vendor_address,
@@ -140,21 +196,56 @@ class AddressPipeline:
                 errors=errors,
                 model=self.model,
                 validator=self._validator_name,
+                skip_validation=self.skip_validation,
             )
 
         try:
-            normalized = self.normalizer.normalize(
+            rule_hint = StandardAddress.from_vendor_text(
+                pre.remainder_without_postcode, customer_id
+            )
+            if rule_hint.co or rule_hint.street_2 or rule_hint.street_3:
+                val_dict = dict(val_dict)
+                val_dict["rule_parser_hint"] = rule_hint.to_storage_dict()
+
+            norm_result = self.normalizer.normalize(
                 vendor_address=vendor_address,
                 preprocessed_remainder=pre.remainder_without_postcode,
                 validation_context=val_dict,
                 customer_id=customer_id,
+                use_rag=use_rag,
+            )
+            normalized = norm_result.address
+            if self.skip_validation and norm_result.llm_validation:
+                val_dict = merge_llm_validation_into_context(val_dict, norm_result.llm_validation)
+                if norm_result.llm_validation.get("postcode_format_valid") is False:
+                    warnings.append("LLM: postcode format invalid or missing.")
+                if norm_result.llm_validation.get("postcode_plausible") is False:
+                    warnings.append("LLM: postcode may not match city/area — manual review recommended.")
+                notes = norm_result.llm_validation.get("validation_notes")
+                if notes:
+                    warnings.append(f"LLM validation: {notes}")
+        except OllamaTimeoutError as exc:
+            errors.append(str(exc))
+            warnings.append("Ollama warm-up in progress - no fallback mapping returned.")
+            return PipelineResult(
+                success=False,
+                vendor_address=vendor_address,
+                customer_id=customer_id,
+                preprocessed=pre_dict,
+                postcode_validation=val_dict,
+                normalized_address={},
+                warnings=warnings,
+                errors=errors,
+                model=self.model,
+                validator=self._validator_name,
+                skip_validation=self.skip_validation,
             )
         except Exception as exc:
             errors.append(f"LLM normalization failed: {exc}")
-            if validation.street_level_validated:
+            if not self.skip_validation and validation and validation.street_level_validated:
                 fallback = _map_validated_to_standard(validation, customer_id)
             else:
-                fallback = self._rule_based_fallback(pre, validation, customer_id)
+                fallback = self._rule_based_fallback(pre, validation or _empty_validation(pre), customer_id)
             return PipelineResult(
                 success=False,
                 vendor_address=vendor_address,
@@ -166,7 +257,16 @@ class AddressPipeline:
                 errors=errors,
                 model=self.model,
                 validator=self._validator_name,
+                skip_validation=self.skip_validation,
             )
+
+        rag_meta = norm_result.rag_metadata or {} if not self.skip_llm else {}
+
+        if self.skip_validation and normalized.postal_code:
+            if not is_valid_uk_postcode_format(normalized.postal_code):
+                warnings.append(
+                    f"Output postcode '{normalized.postal_code}' failed UK format check — review required."
+                )
 
         if not normalized.is_complete():
             warnings.append("Normalized address may be incomplete — review recommended")
@@ -182,6 +282,8 @@ class AddressPipeline:
             errors=errors,
             model=self.model,
             validator=self._validator_name,
+            skip_validation=self.skip_validation,
+            rag_metadata=rag_meta,
         )
 
     @staticmethod
@@ -191,13 +293,25 @@ class AddressPipeline:
         customer_id: str,
     ) -> StandardAddress:
         addr = StandardAddress.from_vendor_text(pre.remainder_without_postcode, customer_id)
-        addr.postal_code = validation.postcode
-        addr.district = (validation.admin_district or addr.district or "").title()
-        addr.other_city = (validation.region or addr.other_city or "").title()
+        addr.postal_code = validation.postcode or pre.extracted_postcode or ""
+        if not addr.district:
+            addr.district = (validation.admin_district or "").title()
+        if not addr.other_city:
+            addr.other_city = (
+                validation.admin_district or validation.region or ""
+            ).title()
         addr.postal_code_city = format_postal_code_city(addr.postal_code, addr.other_city)
         addr.country = "GB"
         addr.time_zone = "GMTUK"
         return addr
+
+
+def _empty_validation(pre: PreprocessedAddress) -> AddressValidation:
+    return AddressValidation(
+        valid=False,
+        source="llm_only",
+        postcode=pre.extracted_postcode or "",
+    )
 
 
 def _split_line_to_street(line: str) -> tuple[str, str]:

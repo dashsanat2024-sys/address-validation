@@ -1,0 +1,12 @@
+# Fine-tuning environment (separate from main app — Apple Silicon / CUDA)
+# python -m venv .venv-finetune && source .venv-finetune/bin/activate
+# pip install -r requirements-finetune.txt
+
+torch>=2.4.0
+datasets>=2.18.0
+transformers>=4.44.0
+trl>=0.9.0
+accelerate>=0.33.0
+bitsandbytes>=0.43.0; platform_system != "Darwin"
+# Unsloth — install per https://docs.unsloth.ai/get-started/install
+# pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"

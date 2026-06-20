@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Elliot's Yard (reversed space-separated)",
+    "address": "Apartment 7 Elliot's Yard 8 Gulson Road Coventry CV1 2NF",
+    "expected": {
+      "street_2": "APARTMENT 7",
+      "street_3": "ELLIOT'S YARD",
+      "street_house_number": "8",
+      "street_4": "GULSON ROAD",
+      "district": "COVENTRY",
+      "other_city": "COVENTRY",
+      "postal_code": "CV1 2NF",
+      "postal_code_city": "CV1 2NF COVENTRY",
+      "country": "GB",
+      "time_zone": "GMTUK"
+    }
+  },
+  {
+    "name": "COMEX business park",
+    "address": "COMEX 2000 UNIT 3 STADIUM BUSINESS COURT, MILLENNIUM WAY, PRIDE PARK, DERBY, DE24 8HP"
+  },
+  {
+    "name": "Flat with comma separation",
+    "address": "FLAT 3,BURFORD LODGE,5 MONTPELLIER PARADE,CHELTENHAM,GL50 1UA"
+  }
+]

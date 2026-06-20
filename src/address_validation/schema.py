@@ -48,6 +48,13 @@ def format_uk_postcode(raw: str) -> str:
     return f"{outcode} {incode}"
 
 
+def is_valid_uk_postcode_format(postcode: str) -> bool:
+    """Check UK postcode structure (format only — not whether it exists)."""
+    if not postcode:
+        return False
+    return bool(UK_POSTCODE_RE.match(format_uk_postcode(postcode)))
+
+
 def format_postal_code_city(postal_code: str, city: str) -> str:
     pc = format_uk_postcode(postal_code)
     city_part = (city or "").strip()
@@ -136,23 +143,52 @@ class StandardAddress(BaseModel):
             addr.po_box_address = "X"
             addr.po_box = parts[0] if parts else text.strip()
             return addr
-        if len(parts) >= 4:
-            addr.street_2, addr.street_house_number, addr.street_4, addr.other_city = (
-                parts[0],
-                _extract_house_number(parts[1]),
-                _extract_street_name(parts[1]),
-                parts[-1],
-            )
-        elif len(parts) == 3:
-            addr.street_2, addr.street_house_number, addr.other_city = parts[0], _extract_house_number(parts[1]), parts[2]
-            addr.street_4 = _extract_street_name(parts[1])
-        elif len(parts) == 2:
+        if not parts:
+            return addr
+
+        from .address_parse import parse_business_comma_address, parse_space_separated
+
+        business = parse_business_comma_address(text, customer_id=customer_id)
+        if business is not None:
+            return business
+
+        if len(parts) == 1:
+            space_parsed = parse_space_separated(parts[0], customer_id=customer_id)
+            if space_parsed is not None:
+                return space_parsed
             addr.street_house_number = _extract_house_number(parts[0])
             addr.street_4 = _extract_street_name(parts[0])
-            addr.other_city = parts[1]
-        elif len(parts) == 1:
-            addr.street_house_number = _extract_house_number(parts[0])
-            addr.street_4 = _extract_street_name(parts[0])
+            return addr
+
+        addr.other_city = parts[-1]
+        address_lines = parts[:-1]
+
+        # Prefer the last line with a house number as the thoroughfare (e.g. "5 Montpellier Parade").
+        street_idx = None
+        for i in range(len(address_lines) - 1, -1, -1):
+            if _extract_house_number(address_lines[i]):
+                street_idx = i
+                break
+
+        supplement: list[str]
+        if street_idx is not None:
+            line = address_lines[street_idx]
+            addr.street_house_number = _extract_house_number(line)
+            addr.street_4 = _extract_street_name(line)
+            supplement = [address_lines[i] for i in range(len(address_lines)) if i != street_idx]
+        else:
+            supplement = list(address_lines)
+            if supplement:
+                last = supplement.pop()
+                addr.street_house_number = _extract_house_number(last)
+                addr.street_4 = _extract_street_name(last)
+
+        if len(supplement) >= 1:
+            addr.street_2 = supplement[0]
+        if len(supplement) >= 2:
+            addr.street_3 = supplement[1]
+        if len(supplement) >= 3:
+            addr.street_5 = supplement[2]
         return addr
 
 
@@ -179,4 +215,15 @@ def _migrate_legacy_fields(data: dict[str, Any]) -> dict[str, Any]:
         data["district"] = data["county"]
     if data.get("postcode") and not data.get("postal_code"):
         data["postal_code"] = data["postcode"]
+    # Some LLM outputs incorrectly emit postal_code_city as an object:
+    # {"postal_code": "...", "city": "..."}.
+    if isinstance(data.get("postal_code_city"), dict):
+        pcc = data["postal_code_city"]
+        pc = pcc.get("postal_code") or data.get("postal_code") or data.get("postcode") or ""
+        city = pcc.get("city") or data.get("other_city") or data.get("city") or ""
+        data["postal_code_city"] = format_postal_code_city(str(pc), str(city))
+        if pc and not data.get("postal_code"):
+            data["postal_code"] = str(pc)
+        if city and not data.get("other_city"):
+            data["other_city"] = str(city)
     return data
