@@ -1,0 +1,14 @@
+.venv/
+node_modules/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+artifacts/
+*.gguf
+*.safetensors
+data/training/train.jsonl
+data/training/synthetic.jsonl
+data/training/postcodes_cache.json
+docs/*.pptx
+docs/ppt_templates/
