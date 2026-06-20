@@ -1,4 +1,6 @@
 .venv/
+.venv-finetune/
+**/.venv/
 node_modules/
 .git/
 __pycache__/
